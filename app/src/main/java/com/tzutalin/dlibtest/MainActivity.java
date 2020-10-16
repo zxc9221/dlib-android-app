@@ -202,7 +202,7 @@ public class MainActivity extends AppCompatActivity {
     /**
      * Checks if the app has permission to write to device storage or open camera
      * If the app does not has permission then the user will be prompted to grant permissions
-     *
+     * test
      * @param activity
      */
     @DebugLog
