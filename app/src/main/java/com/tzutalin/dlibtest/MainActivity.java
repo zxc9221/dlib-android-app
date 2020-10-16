@@ -1,6 +1,6 @@
 /*
-*  Copyright (C) 2015-present TzuTaLin
-*/
+ *  Copyright (C) 2015-present TzuTaLin
+ */
 
 package com.tzutalin.dlibtest;
 
@@ -14,10 +14,12 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.drawable.BitmapDrawable;
+import android.media.ExifInterface;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Build;
@@ -27,8 +29,10 @@ import android.provider.MediaStore;
 import android.support.annotation.NonNull;
 import android.support.design.widget.FloatingActionButton;
 import android.support.v4.app.ActivityCompat;
+import android.support.v4.content.FileProvider;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
+import android.util.Log;
 import android.view.View;
 import android.widget.Toast;
 
@@ -37,19 +41,27 @@ import com.dexafree.materialList.card.provider.BigImageCardProvider;
 import com.dexafree.materialList.view.MaterialListView;
 import com.tzutalin.dlib.Constants;
 import com.tzutalin.dlib.FaceDet;
-import com.tzutalin.dlib.PedestrianDet;
 import com.tzutalin.dlib.VisionDetRet;
 
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
+import java.lang.String;
 
 import hugo.weaving.DebugLog;
 import timber.log.Timber;
 
+
+
 public class MainActivity extends AppCompatActivity {
     private static final int RESULT_LOAD_IMG = 1;
     private static final int REQUEST_CODE_PERMISSION = 2;
+    static final int REQUEST_IMAGE_CAPTURE = 3;
 
     private static final String TAG = "MainActivity";
 
@@ -67,10 +79,12 @@ public class MainActivity extends AppCompatActivity {
     private FloatingActionButton mFabCamActionBt;
     private Toolbar mToolbar;
 
+    private Uri mUriPhotoTaken;
+    private Bitmap imageBitmap;
     private String mTestImgPath;
     private FaceDet mFaceDet;
-    private PedestrianDet mPersonDet;
     private List<Card> mCard = new ArrayList<>();
+    String imageFileName;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -92,6 +106,69 @@ public class MainActivity extends AppCompatActivity {
         setupUI();
     }
 
+    private File createImageFile() throws IOException {
+        // Create an image file name
+        String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
+        imageFileName = "JPEG_" + timeStamp + "_";
+        File storageDir = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
+        File image = File.createTempFile(
+                imageFileName,  /* prefix */
+                ".jpg",         /* suffix */
+                storageDir      /* directory */
+        );
+
+        // Save a file: path for use with ACTION_VIEW intents
+        mTestImgPath = image.getAbsolutePath();
+        return image;
+    }
+
+    private void Capture() {
+        Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+        // Ensure that there's a camera activity to handle the intent
+        if (takePictureIntent.resolveActivity(getPackageManager()) != null) {
+            // Create the File where the photo should go
+            File photoFile = null;
+            try {
+                photoFile = createImageFile();
+                Log.d("photoFile",photoFile+"");
+            } catch (IOException ex) {
+                // Error occurred while creating the File
+                Log.e("Captureabc","error");
+            }
+            // Continue only if the File was successfully created
+            if (photoFile != null) {
+                Uri photoURI = FileProvider.getUriForFile(this,
+                        "com.tzutalin.dlibtest.fileprovider",
+                        photoFile);
+                mUriPhotoTaken = photoURI;
+                takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, photoURI);
+                startActivityForResult(takePictureIntent, REQUEST_IMAGE_CAPTURE);
+            }
+        }
+    }
+
+    private void saveImage(Bitmap finalBitmap){
+        String imageFileForGalName = imageFileName;
+        Log.d("sava gallery", imageFileForGalName+"");
+        File myDir = new File(Environment.getExternalStorageDirectory().toString());
+        //File myDir = new File(Environment.getExternalStorageDirectory()+"/Pictures", "AcneAnalyzer");
+        myDir.mkdirs();
+        File file = new File(myDir, imageFileForGalName);
+        try{
+            FileOutputStream out = new FileOutputStream(file);
+            finalBitmap.compress(Bitmap.CompressFormat.JPEG, 90, out);
+            this.sendBroadcast(new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, Uri.fromFile(file)));
+            mTestImgPath = file.getAbsolutePath();
+            out.flush();
+            out.close();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+
     protected void setupUI() {
         mListView = (MaterialListView) findViewById(R.id.material_listview);
         mFabActionBt = (FloatingActionButton) findViewById(R.id.fab);
@@ -111,7 +188,10 @@ public class MainActivity extends AppCompatActivity {
         mFabCamActionBt.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                startActivity(new Intent(MainActivity.this, CameraActivity.class));
+                //startActivity(new Intent(MainActivity.this, CameraActivity.class));
+                Toast.makeText(MainActivity.this, "Take a picture", Toast.LENGTH_SHORT).show();
+
+                Capture();
             }
         });
 
@@ -129,7 +209,7 @@ public class MainActivity extends AppCompatActivity {
     private static boolean verifyPermissions(Activity activity) {
         // Check if we have write permission
         int write_permission = ActivityCompat.checkSelfPermission(activity, Manifest.permission.WRITE_EXTERNAL_STORAGE);
-        int read_persmission = ActivityCompat.checkSelfPermission(activity, Manifest.permission.WRITE_EXTERNAL_STORAGE);
+        int read_persmission = ActivityCompat.checkSelfPermission(activity, Manifest.permission.READ_EXTERNAL_STORAGE);
         int camera_permission = ActivityCompat.checkSelfPermission(activity, Manifest.permission.CAMERA);
 
         if (write_permission != PackageManager.PERMISSION_GRANTED ||
@@ -190,27 +270,73 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    public static Bitmap rotateImage(Bitmap source, float angle) {
+        Matrix matrix = new Matrix();
+        matrix.postRotate(angle);
+        Log.d("Rotate", angle+"");
+        return Bitmap.createBitmap(source, 0, 0, source.getWidth(), source.getHeight(), matrix, true);
+    }
+    public int exifOrientationToDegrees(int exifOrientation){
+        if(exifOrientation == ExifInterface.ORIENTATION_ROTATE_90){
+            return 90;
+        }
+        else if(exifOrientation == ExifInterface.ORIENTATION_ROTATE_180){
+            return 180;
+        }
+        else if(exifOrientation == ExifInterface.ORIENTATION_ROTATE_270){
+            return 270;
+        }
+        else{
+            return 0;
+        }
+    }
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+
         try {
+
             // When an Image is picked
-            if (requestCode == RESULT_LOAD_IMG && resultCode == RESULT_OK && null != data) {
+            if ((requestCode == RESULT_LOAD_IMG || requestCode ==  REQUEST_IMAGE_CAPTURE) && resultCode == RESULT_OK ) {
+                Uri selectedImage;
                 // Get the Image from data
-                Uri selectedImage = data.getData();
-                String[] filePathColumn = {MediaStore.Images.Media.DATA};
-                // Get the cursor
-                Cursor cursor = getContentResolver().query(selectedImage, filePathColumn, null, null, null);
-                cursor.moveToFirst();
-                int columnIndex = cursor.getColumnIndex(filePathColumn[0]);
-                mTestImgPath = cursor.getString(columnIndex);
-                cursor.close();
+                if (data == null || data.getData() == null) {
+                    File file = new File(mTestImgPath);
+
+                    BitmapFactory.Options options = new BitmapFactory.Options();
+                    imageBitmap = BitmapFactory.decodeFile(file.getAbsolutePath(), options);
+                    Log.d("Bitmap Decode", "OK");
+
+                    if (imageBitmap != null) {
+                        ExifInterface ei = new ExifInterface(mTestImgPath);
+                        int orientation = ei.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_UNDEFINED);
+                        int exifDegree = exifOrientationToDegrees(orientation);
+
+                        Bitmap rotatedBitmap = rotateImage(imageBitmap, exifDegree);
+                        Log.d("Camera Image URI", mUriPhotoTaken+"");
+
+                        saveImage(rotatedBitmap);   // 갤러리에 저장하는 함수
+                    }
+
+                    //File cropFile = createImageFile();  // 새 크롭 이미지 (덮어쓰기X)
+                } else {
+                    selectedImage = data.getData();
+                    String[] filePathColumn = {MediaStore.Images.Media.DATA};
+                    // Get the cursor
+                    Cursor cursor = getContentResolver().query(selectedImage, filePathColumn, null, null, null);
+                    cursor.moveToFirst();
+                    int columnIndex = cursor.getColumnIndex(filePathColumn[0]);
+                    mTestImgPath = cursor.getString(columnIndex);
+                    cursor.close();
+                }
+
                 if (mTestImgPath != null) {
                     runDemosAsync(mTestImgPath);
                     Toast.makeText(this, "Img Path:" + mTestImgPath, Toast.LENGTH_SHORT).show();
                 }
             } else {
-                Toast.makeText(this, "You haven't picked Image", Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "You haven't picked Image picture", Toast.LENGTH_LONG).show();
             }
         } catch (Exception e) {
             Toast.makeText(this, "Something went wrong", Toast.LENGTH_LONG).show();
@@ -223,54 +349,16 @@ public class MainActivity extends AppCompatActivity {
 
     @NonNull
     private void runDemosAsync(@NonNull final String imgPath) {
-        demoPersonDet(imgPath);
         demoFaceDet(imgPath);
     }
 
-    private void demoPersonDet(final String imgPath) {
-        new AsyncTask<Void, Void, List<VisionDetRet>>() {
-            @Override
-            protected void onPreExecute() {
-                super.onPreExecute();
-            }
-
-            @Override
-            protected void onPostExecute(List<VisionDetRet> personList) {
-                super.onPostExecute(personList);
-                if (personList.size() > 0) {
-                    Card card = new Card.Builder(MainActivity.this)
-                            .withProvider(BigImageCardProvider.class)
-                            .setDrawable(drawRect(imgPath, personList, Color.BLUE))
-                            .setTitle("Person det")
-                            .endConfig()
-                            .build();
-                    mCard.add(card);
-                } else {
-                    Toast.makeText(getApplicationContext(), "No person", Toast.LENGTH_LONG).show();
-                }
-                updateCardListView();
-            }
-
-            @Override
-            protected List<VisionDetRet> doInBackground(Void... voids) {
-                // Init
-                if (mPersonDet == null) {
-                    mPersonDet = new PedestrianDet();
-                }
-
-                Timber.tag(TAG).d("Image path: " + imgPath);
-
-                List<VisionDetRet> personList = mPersonDet.detect(imgPath);
-                return personList;
-            }
-        }.execute();
-    }
 
     private void demoFaceDet(final String imgPath) {
         new AsyncTask<Void, Void, List<VisionDetRet>>() {
             @Override
             protected void onPreExecute() {
                 super.onPreExecute();
+                Log.d("DemoFace","Detecting faces");
                 showDiaglog("Detecting faces");
             }
 
@@ -280,7 +368,7 @@ public class MainActivity extends AppCompatActivity {
                 if (faceList.size() > 0) {
                     Card card = new Card.Builder(MainActivity.this)
                             .withProvider(BigImageCardProvider.class)
-                            .setDrawable(drawRect(imgPath, faceList, Color.GREEN))
+                            .setDrawable(drawRect(imgPath, faceList, Color.BLUE))
                             .setTitle("Face det")
                             .endConfig()
                             .build();
@@ -309,7 +397,6 @@ public class MainActivity extends AppCompatActivity {
                     });
                     FileUtils.copyFileFromRawToOthers(getApplicationContext(), R.raw.shape_predictor_68_face_landmarks, targetPath);
                 }
-
                 List<VisionDetRet> faceList = mFaceDet.detect(imgPath);
                 return faceList;
             }
@@ -337,6 +424,8 @@ public class MainActivity extends AppCompatActivity {
 
     @DebugLog
     private BitmapDrawable drawRect(String path, List<VisionDetRet> results, int color) {
+        int[] arr_x = new int[68] ;
+        int[] arr_y = new int[68];
         BitmapFactory.Options options = new BitmapFactory.Options();
         options.inSampleSize = 1;
         Bitmap bm = BitmapFactory.decodeFile(path, options);
@@ -378,16 +467,24 @@ public class MainActivity extends AppCompatActivity {
             bounds.top = (int) (ret.getTop() * resizeRatio);
             bounds.right = (int) (ret.getRight() * resizeRatio);
             bounds.bottom = (int) (ret.getBottom() * resizeRatio);
-            canvas.drawRect(bounds, paint);
+            //canvas.drawRect(bounds, paint);
             // Get landmark
             ArrayList<Point> landmarks = ret.getFaceLandmarks();
+            int i = 0;
             for (Point point : landmarks) {
                 int pointX = (int) (point.x * resizeRatio);
                 int pointY = (int) (point.y * resizeRatio);
-                canvas.drawCircle(pointX, pointY, 2, paint);
+                arr_x[i] = pointX;
+                arr_y[i] = pointY;
+                Log.d("faceabc",i++ + "<"+ pointX + " , " + pointY+">");
+                canvas.drawCircle(pointX, pointY, 1, paint);
             }
         }
-
+        paint.setColor(Color.RED);
+        canvas.drawLine(arr_x[27],arr_y[27],arr_x[8],arr_y[8],paint);
+        canvas.drawLine(arr_x[19],arr_y[19],arr_x[24],arr_y[24],paint);
+        canvas.drawLine(arr_x[36],arr_y[36],arr_x[45],arr_y[45],paint);
+        canvas.drawLine(arr_x[48],arr_y[48],arr_x[54],arr_y[54],paint);
         return new BitmapDrawable(getResources(), bm);
     }
 

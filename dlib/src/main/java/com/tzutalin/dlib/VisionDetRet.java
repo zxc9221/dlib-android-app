@@ -21,6 +21,7 @@ package com.tzutalin.dlib;
  */
 
 import android.graphics.Point;
+import android.util.Log;
 
 import java.util.ArrayList;
 

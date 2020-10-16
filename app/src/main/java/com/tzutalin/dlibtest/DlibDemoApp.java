@@ -31,7 +31,6 @@ public class DlibDemoApp extends Application {
 
         if (BuildConfig.DEBUG) {
             Timber.plant(new Timber.DebugTree());
-            //Timber.plant(new DebugLogFileTree(Environment.getExternalStorageDirectory().toString()));
         } else {
             Timber.plant(new ReleaseTree());
         }
